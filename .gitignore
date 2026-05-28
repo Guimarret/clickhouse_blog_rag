@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Virtualenv
+.venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Raw-stage artifacts (regenerable; not shipped with the submission)
+data/raw/
+data/topic_models/topic_model_*/topic_model/*.bin

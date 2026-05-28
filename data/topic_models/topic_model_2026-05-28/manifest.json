@@ -1,0 +1,10 @@
+{
+  "fit_date": "2026-05-28",
+  "n_chunks": 6171,
+  "encoder": "BAAI/bge-large-en-v1.5",
+  "umap_seed": 42,
+  "min_topic_size": 15,
+  "n_topics": 73,
+  "outlier_reduction": "embeddings",
+  "labeled_with_llm": true
+}
