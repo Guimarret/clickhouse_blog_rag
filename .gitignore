@@ -18,3 +18,22 @@ __pycache__/
 # Raw-stage artifacts (regenerable; not shipped with the submission)
 data/raw/
 data/topic_models/topic_model_*/topic_model/*.bin
+
+# LaTeX build artifacts (regenerated on each compile)
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.bbl
+*.blg
+*.lof
+*.lot
+*.idx
+*.ind
+*.ilg
+*.nav
+*.snm
+*.vrb
