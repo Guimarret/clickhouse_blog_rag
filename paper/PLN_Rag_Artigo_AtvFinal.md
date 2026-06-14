@@ -2,12 +2,12 @@
 
 **Recuperação Densa de Passagens com Modelagem de Tópicos BERTopic Aplicada ao Corpus do Blog ClickHouse**
 
-**[INSERIR NOME COMPLETO]¹, [INSERIR NOME DO PROFESSOR]¹**
+**GUILHERME ESTEVES MARRET¹, JOÃO PAULO MARTINS DE BRITO¹, LEONARDO DE LELIS ROSSI¹**
 
-guimarret@gmail.com, [INSERIR E-MAIL DO PROFESSOR]
+guimarret@gmail.com, joao.paulomartins107@gmail.com, leoboralelis@gmail.com
 
-¹ [INSERIR INSTITUIÇÃO]  
-[INSERIR CIDADE – UF]
+¹Faculdade de Tecnologia de Jundiaí  
+Jundiaí - SP
 
 **Resumo:** A busca por informações em corpora técnicos extensos é frequentemente limitada por sistemas baseados em palavras-chave, que falham ao recuperar conteúdo semanticamente relevante quando os termos exatos não estão presentes no texto-fonte. Este trabalho apresenta um sistema de Recuperação Densa de Passagens (Dense Passage Retrieval — DPR) aplicado ao corpus do blog técnico ClickHouse, composto por 791 artigos, com o objetivo de oferecer busca semântica sobre o conhecimento ali registrado. O pipeline implementado segmenta os textos em 6.171 trechos de até 512 tokens, gera embeddings densos de 1.024 dimensões com o modelo BAAI/bge-large-en-v1.5, organiza os trechos em 73 tópicos automaticamente descobertos via BERTopic (UMAP + HDBSCAN + KeyBERTInspired), e atribui rótulos descritivos a cada tópico via Claude Haiku 4.5. A recuperação inicial por similaridade cosseno é refinada por um re-ranqueador cruzado (BAAI/bge-reranker-large), formando um pipeline em dois estágios. O sistema foi avaliado em um conjunto de 30 consultas curadas com verdade-fundamental ao nível de URL do artigo. Os resultados mostraram recall@10 de 0,933 e MRR de 0,662 na configuração com re-ranqueamento — um ganho de +10 pontos percentuais em relação à recuperação puramente densa (recall@10 de 0,833). O diferencial do trabalho está na combinação de DPR com modelagem de tópicos explicável e preservação de metadados temporais e de versão por trecho, viabilizando citação contextual e abrindo caminho para futuras consultas filtradas.
 
