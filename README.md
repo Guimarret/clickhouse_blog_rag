@@ -54,24 +54,34 @@ sitemap clickhouse.com/blog
 │   ├── topics.py             (BERTopic + dated checkpoints)
 │   ├── index.py              (parquet I/O)
 │   ├── llm.py                (Ollama + Anthropic client)
+│   ├── evaluate.py           (eval-set seeding + recall@k / MRR scoring)
+│   ├── reranker.py           (BGE cross-encoder; two-stage retrieval)
 │   └── cli.py                (Typer CLI)
 │
 ├── ollama_setup/             (optional local LLM setup)
 │   ├── README.md
 │   └── setup.sh
 │
-└── data/
-    ├── canonical/
-    │   ├── blog.parquet                       (791 canonical posts)
-    │   ├── blog_chunks.parquet                (6171 chunks)
-    │   └── blog_chunks_embedded.parquet       (chunks + embeddings)
-    └── topic_models/
-        └── topic_model_2026-05-28/
-            ├── topic_model/                   (serialized BERTopic state)
-            ├── topics.parquet                 (73 topics + labels)
-            ├── chunks_topics.parquet          (chunk → topic_id mapping)
-            ├── hierarchy.json                 (topic merge tree)
-            └── manifest.json                  (run config: seed, encoder, n_chunks)
+├── paper/                    (academic write-up — PLN final assignment)
+│   ├── PLN_Rag_Artigo_AtvFinal.md   (Markdown source)
+│   ├── PLN_Rag_Artigo_AtvFinal.tex  (LaTeX source)
+│   └── PLN_Rag_Artigo_AtvFinal.pdf  (compiled PDF, 9 pages)
+│
+├── data/
+│   ├── canonical/
+│   │   ├── blog.parquet                      (791 canonical posts)
+│   │   ├── blog_chunks.parquet               (6171 chunks)
+│   │   └── blog_chunks_embedded.parquet      (chunks + embeddings)
+│   └── topic_models/
+│       └── topic_model_2026-05-28/
+│           ├── topic_model/                  (serialized BERTopic state)
+│           ├── topics.parquet                (73 topics + labels)
+│           ├── chunks_topics.parquet         (chunk → topic_id mapping)
+│           ├── hierarchy.json                (topic merge tree)
+│           └── manifest.json                 (run config: seed, encoder, n_chunks)
+│
+└── eval/
+    └── queries.yaml                          (30 curated Q&A pairs)
 ```
 
 ## Prerequisites
@@ -143,6 +153,32 @@ uv run python -m rag_dpr_blog.cli topics-list
 uv run python -m rag_dpr_blog.cli topics-show 6
 ```
 
+### Evaluation
+
+A 30-query eval set lives at `eval/queries.yaml`. Each query was seeded
+by Haiku from the medoid chunk of one of the top-30 largest topics, then
+manually reviewed (Japanese-language posts had their queries translated
+and ground-truth URLs re-pointed to their English equivalents). Ground
+truth is *same post URL* — a query counts as a hit at rank `r` if any
+chunk in the top-`r` shares the seed's source_url.
+
+```bash
+# Dense-only scoring (BGE bi-encoder, cosine top-k)
+uv run python -m rag_dpr_blog.cli eval
+
+# Two-stage scoring (BGE dense top-50 → BGE cross-encoder rerank → top-k)
+uv run python -m rag_dpr_blog.cli eval --rerank
+
+# Re-seed from scratch (~$0.10 in Haiku tokens)
+uv run python -m rag_dpr_blog.cli eval-seed --n 30 --overwrite
+```
+
+The `query` command also accepts `--rerank` for interactive use:
+
+```bash
+uv run python -m rag_dpr_blog.cli query "how does ClickHouse handle vector search" --rerank --k 5
+```
+
 ### Re-scraping the blog (optional — data is already included)
 
 The scraping stage is not part of this standalone package because it
@@ -172,6 +208,12 @@ Documented in detail in [`PLAN.md`](PLAN.md). The most relevant points:
 - **Retrieval mode**: A — plain cosine vector search; the topic label
   rides along as metadata on each hit. Mode B (two-stage, topic-filter
   → vector-rank) is left as an optional follow-up.
+- **Evaluation**: 30 Haiku-seeded queries (one per top-30 largest topic's
+  medoid chunk), manually reviewed. Ground truth = same post URL.
+  Metrics: recall@{1,3,5,10}, MRR. Reproducible via `eval-seed` + `eval`.
+- **Reranker**: `BAAI/bge-reranker-large` cross-encoder on top of the BGE
+  bi-encoder. Two-stage: dense top-50 → cross-encoder rescore → top-k.
+  Lifts recall@10 by +10 points on the eval set, recall@5 by +13.
 
 ## Observed metrics
 
@@ -183,12 +225,23 @@ Documented in detail in [`PLAN.md`](PLAN.md). The most relevant points:
 - 73 topics discovered; after outlier reduction, zero chunks left in
   cluster −1
 - Haiku labels: ~1.5 min for the 73 topics, total cost ≈ $0.10–0.15
+- Retrieval on the 30-query eval set:
+
+  |              | dense only | + rerank |
+  |--------------|-----------:|---------:|
+  | recall@1     | 0.533      | 0.500    |
+  | recall@3     | 0.700      | 0.800    |
+  | recall@5     | 0.733      | 0.867    |
+  | recall@10    | 0.833      | **0.933** |
+  | MRR          | 0.628      | 0.662    |
+  | misses (/30) | 5          | 2        |
+
+  Reranking shaves the top by 1 (cross-encoders sometimes swap rank-1
+  for a fractionally more relevant chunk in a different post), but lifts
+  everything from recall@3 outward substantially.
 
 ## Out of scope (future work)
 
-- Evaluation set (~30 hand-curated Q&A pairs) — the most important
-  next step; without it, every later change is speculative
-- Cross-encoder re-ranker (expected boost: +10–20 points of recall)
 - Hybrid BM25 + vector retrieval via Reciprocal Rank Fusion
 - Two-stage topic-filtered retrieval (opt-in via `--two-stage`)
 - UI (Streamlit / Gradio) for demo

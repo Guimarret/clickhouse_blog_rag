@@ -230,6 +230,10 @@ def cli_topics_show(
 def cli_query(
     text: str,
     k: Annotated[int, typer.Option(help="Top-k chunks to return.")] = 5,
+    rerank: Annotated[
+        bool, typer.Option("--rerank/--no-rerank", help="Apply cross-encoder reranking.")
+    ] = False,
+    rerank_n: Annotated[int, typer.Option(help="Dense candidates to rerank.")] = 50,
     checkpoint: Annotated[Path | None, typer.Option(help="Override checkpoint dir.")] = None,
     model_name: Annotated[
         str, typer.Option("--model", help="Encoder for the query (must match passage encoder).")
@@ -244,8 +248,21 @@ def cli_query(
     df, embs = read_embeddings(CHUNKS_EMB_PARQUET)
     enc = Encoder(model_name)
     qvec = enc.encode([text], kind="query")[0]
-    scores = embs @ qvec
-    top_idx = np.argsort(-scores)[:k]
+    dense_scores = embs @ qvec
+    if rerank:
+        from rag_dpr_blog.reranker import Reranker
+
+        cand_idx = np.argsort(-dense_scores)[:rerank_n]
+        candidates = [df.iloc[int(i)]["chunk_text"] for i in cand_idx]
+        rr = Reranker()
+        rr_scores = rr.rerank(text, candidates)
+        order = np.argsort(-rr_scores)
+        top_idx = cand_idx[order][:k]
+        scores = np.full_like(dense_scores, fill_value=float("-inf"))
+        scores[top_idx] = rr_scores[order][:k]
+    else:
+        top_idx = np.argsort(-dense_scores)[:k]
+        scores = dense_scores
 
     cp = checkpoint or latest_checkpoint(TOPIC_MODELS_ROOT)
     chunks_topics = None
@@ -277,6 +294,122 @@ def cli_query(
             f"     {r['source_url']}\n"
             f"     {r['chunk_text'][:240].replace(chr(10), ' ')} ...\n"
         )
+
+
+@app.command("eval-seed")
+def cli_eval_seed(
+    n_queries: Annotated[int, typer.Option("--n", help="Number of seed queries to generate.")] = 30,
+    out_path: Annotated[Path, typer.Option("--out", help="Output YAML path.")] = Path("eval/queries.yaml"),
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace existing file.")] = False,
+    checkpoint: Annotated[Path | None, typer.Option(help="Override checkpoint dir.")] = None,
+) -> None:
+    """Seed eval queries via Haiku: one question per top topic's medoid chunk."""
+    import pyarrow.parquet as pq
+
+    from rag_dpr_blog.evaluate import (
+        EvalQuery,
+        generate_query_for_chunk,
+        select_seed_chunks,
+        write_eval_yaml,
+    )
+    from rag_dpr_blog.index import read_embeddings
+    from rag_dpr_blog.topics import latest_checkpoint
+
+    if out_path.exists() and not overwrite:
+        typer.echo(f"{out_path} exists. Pass --overwrite to replace.")
+        raise typer.Exit(code=1)
+
+    cp = checkpoint or latest_checkpoint(TOPIC_MODELS_ROOT)
+    if cp is None:
+        typer.echo(f"No checkpoints under {TOPIC_MODELS_ROOT}")
+        raise typer.Exit(code=1)
+
+    df, embs = read_embeddings(CHUNKS_EMB_PARQUET)
+    chunks_topics_df = pq.read_table(cp / "chunks_topics.parquet").to_pandas()
+    seeds = select_seed_chunks(df, embs, chunks_topics_df, n_queries=n_queries)
+    typer.echo(f"Selected {len(seeds)} seed chunks from {cp.name}. Generating queries via Haiku ...")
+
+    queries: list[EvalQuery] = []
+    for i, seed in enumerate(seeds, 1):
+        try:
+            q_text = generate_query_for_chunk(seed["chunk_text"])
+        except Exception as e:  # noqa: BLE001
+            typer.echo(f"  [{i:2d}/{len(seeds)}] topic={seed['topic_id']:3d}  FAILED: {e}")
+            continue
+        typer.echo(f"  [{i:2d}/{len(seeds)}] topic={seed['topic_id']:3d}  {q_text[:80]}")
+        queries.append(
+            EvalQuery(
+                query=q_text,
+                relevant_source_url=seed["source_url"],
+                seed_chunk_id=seed["chunk_id"],
+                seed_topic_id=seed["topic_id"],
+                notes="",
+            )
+        )
+
+    write_eval_yaml(queries, out_path)
+    typer.echo(
+        f"\nWrote {len(queries)} queries → {out_path}\n"
+        "Review and refine the YAML, then run: uv run python -m rag_dpr_blog.cli eval"
+    )
+
+
+@app.command("eval")
+def cli_eval(
+    queries_path: Annotated[Path, typer.Option("--queries", help="Path to queries YAML.")] = Path("eval/queries.yaml"),
+    model_name: Annotated[
+        str, typer.Option("--model", help="Encoder model (must match passage encoder).")
+    ] = "BAAI/bge-large-en-v1.5",
+    rerank: Annotated[
+        bool, typer.Option("--rerank/--no-rerank", help="Apply cross-encoder reranking.")
+    ] = False,
+    rerank_n: Annotated[int, typer.Option(help="Dense candidates to rerank per query.")] = 50,
+    show_misses: Annotated[bool, typer.Option("--show-misses/--no-show-misses")] = True,
+) -> None:
+    """Score the eval set: recall@{1,3,5,10} + MRR."""
+    from rag_dpr_blog.encoders import Encoder
+    from rag_dpr_blog.evaluate import load_eval_yaml, score
+    from rag_dpr_blog.index import read_embeddings
+
+    if not queries_path.exists():
+        typer.echo(f"No eval file at {queries_path}. Run `eval-seed` first.")
+        raise typer.Exit(code=1)
+
+    queries = load_eval_yaml(queries_path)
+    df, embs = read_embeddings(CHUNKS_EMB_PARQUET)
+    typer.echo(f"Loaded {len(queries)} queries from {queries_path}.")
+    typer.echo(
+        f"Scoring against {len(df)} chunks "
+        f"({'dense + cross-encoder rerank top-' + str(rerank_n) if rerank else 'dense only'}) ...\n"
+    )
+
+    enc = Encoder(model_name)
+    reranker = None
+    if rerank:
+        from rag_dpr_blog.reranker import Reranker
+
+        reranker = Reranker()
+        typer.echo(f"Reranker: {reranker.model_name} on {reranker.device}\n")
+
+    report = score(queries, df, embs, encoder=enc, reranker=reranker, rerank_n=rerank_n)
+
+    typer.echo("Metrics")
+    typer.echo("-------")
+    for k, v in report.metrics.items():
+        typer.echo(f"  {k:10s} = {v:.3f}")
+
+    if show_misses:
+        max_k = max(
+            int(k.split("@")[1]) for k in report.metrics if k.startswith("recall@")
+        )
+        misses = [r for r in report.per_query if r.first_rank is None]
+        if misses:
+            typer.echo(f"\nMisses (not in top {max_k}):")
+            for r in misses:
+                typer.echo(f"  [---]  {r.query[:80]}")
+                typer.echo(f"         expected: {r.relevant_source_url}")
+        else:
+            typer.echo(f"\nNo misses — every query hit within top {max_k}.")
 
 
 if __name__ == "__main__":

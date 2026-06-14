@@ -1,0 +1,157 @@
+- query: How did ClickHouse reduce development time for new data features at LaunchDarkly?
+  relevant_source_url: https://clickhouse.com/blog/launch-darkly
+  seed_chunk_id: blog-launch-darkly-c002
+  seed_topic_id: 3
+  notes: ''
+- query: How much faster did the query run with projections enabled?
+  relevant_source_url: https://clickhouse.com/blog/projections-secondary-indices
+  seed_chunk_id: blog-projections-secondary-indices-c004
+  seed_topic_id: 1
+  notes: ''
+- query: What are the overall steps for using ClickHouse as a feature store?
+  relevant_source_url: https://clickhouse.com/blog/modeling-machine-learning-data-in-clickhouse
+  seed_chunk_id: blog-modeling-machine-learning-data-in-clickhouse-jp-c002
+  seed_topic_id: 0
+  notes: ''
+- query: How does ClickHouse's OpenTelemetry exporter handle different observability
+    data schemas?
+  relevant_source_url: https://clickhouse.com/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse
+  seed_chunk_id: blog-clickstack-a-high-performance-oss-observability-stack-on-clickhouse-c003
+  seed_topic_id: 2
+  notes: ''
+- query: How does placing the smaller table on the right side of a join improve query
+    performance?
+  relevant_source_url: https://clickhouse.com/blog/clickhouse-release-24-12
+  seed_chunk_id: blog-clickhouse-release-24-12-c008
+  seed_topic_id: 4
+  notes: ''
+- query: How do you set up ClickHouse properly for AI agents and conversational analytics?
+  relevant_source_url: https://clickhouse.com/blog/building-a-data-platform-for-agents
+  seed_chunk_id: blog-building-a-data-platform-for-agents-c005
+  seed_topic_id: 5
+  notes: ''
+- query: How do you implement locality sensitive hashing for approximate nearest neighbor
+    search in ClickHouse?
+  relevant_source_url: https://clickhouse.com/blog/approximate-nearest-neighbour-ann-with-sql-powered-local-sensitive-hashing-lsh-random-projections
+  seed_chunk_id: blog-approximate-nearest-neighbour-ann-with-sql-powered-local-sensitive-hashing-lsh-random-projections-c004
+  seed_topic_id: 6
+  notes: ''
+- query: How can I optimize ClickHouse performance for analytical workloads?
+  relevant_source_url: https://clickhouse.com/blog/10-best-practice-tips
+  seed_chunk_id: blog-10-best-practice-tips-c000
+  seed_topic_id: 38
+  notes: ''
+- query: How does ClickHouse pricing compare to Snowflake for query acceleration features?
+  relevant_source_url: https://clickhouse.com/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis
+  seed_chunk_id: blog-clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis-c030
+  seed_topic_id: 7
+  notes: ''
+- query: How can you optimize ClickHouse trace queries with materialized views and
+    indexing strategies?
+  relevant_source_url: https://clickhouse.com/blog/storing-traces-and-spans-open-telemetry-in-clickhouse
+  seed_chunk_id: blog-storing-traces-and-spans-open-telemetry-in-clickhouse-c018
+  seed_topic_id: 12
+  notes: ''
+- query: How can understanding the Parquet file structure improve compression and
+    read performance?
+  relevant_source_url: https://clickhouse.com/blog/apache-parquet-clickhouse-local-querying-writing-internals-row-groups
+  seed_chunk_id: blog-apache-parquet-clickhouse-local-querying-writing-internals-row-groups-c000
+  seed_topic_id: 8
+  notes: ''
+- query: How can I remove duplicate records from ClickHouse after data insertion?
+  relevant_source_url: https://clickhouse.com/blog/common-getting-started-issues-with-clickhouse
+  seed_chunk_id: blog-common-getting-started-issues-with-clickhouse-c005
+  seed_topic_id: 17
+  notes: ''
+- query: What new feature became production-ready in ClickHouse version 24.10?
+  relevant_source_url: https://clickhouse.com/blog/202411-newsletter
+  seed_chunk_id: blog-202411-newsletter-c001
+  seed_topic_id: 10
+  notes: ''
+- query: How can I replicate Postgres data to ClickHouse for real-time analytics?
+  relevant_source_url: https://clickhouse.com/blog/postgres-to-clickhouse-data-modeling-tips-v2
+  seed_chunk_id: blog-postgres-to-clickhouse-data-modeling-tips-v2-c000
+  seed_topic_id: 9
+  notes: ''
+- query: How does ClickHouse handle JSON values with different types at the same path?
+  relevant_source_url: https://clickhouse.com/blog/building-a-medallion-architecture-for-bluesky-json-data-with-clickhouse
+  seed_chunk_id: blog-building-a-medallion-architecture-for-bluesky-json-data-with-clickhouse-c005
+  seed_topic_id: 15
+  notes: ''
+- query: What are ClickHouse Local and chDB used for?
+  relevant_source_url: https://clickhouse.com/blog/hybrid-query-execution-experiment
+  seed_chunk_id: blog-hybrid-query-execution-experiment-c000
+  seed_topic_id: 14
+  notes: ''
+- query: How many taxi trips occur each hour across all days in the dataset?
+  relevant_source_url: https://clickhouse.com/blog/querying-datetimes
+  seed_chunk_id: blog-querying-datetimes-c003
+  seed_topic_id: 28
+  notes: ''
+- query: How do I manage ClickHouse users and roles with Terraform?
+  relevant_source_url: https://clickhouse.com/blog/new-terraform-provider-manage-clickhouse-database-users-roles-and-privileges-with-code
+  seed_chunk_id: blog-new-terraform-provider-manage-clickhouse-database-users-roles-and-privileges-with-code-c000
+  seed_topic_id: 23
+  notes: ''
+- query: How much did bloom filter indexing improve query performance and row processing?
+  relevant_source_url: https://clickhouse.com/blog/whats-new-in-clickstack-january-2026
+  seed_chunk_id: blog-whats-new-in-clickstack-january-2026-c004
+  seed_topic_id: 11
+  notes: ''
+- query: How can you import data from files into ClickHouse efficiently?
+  relevant_source_url: https://clickhouse.com/blog/getting-data-into-clickhouse-part-1
+  seed_chunk_id: blog-getting-data-into-clickhouse-part-1-c012
+  seed_topic_id: 30
+  notes: ''
+- query: What new lakehouse catalogs does ClickHouse 25.3 support for querying?
+  relevant_source_url: https://clickhouse.com/blog/clickhouse-release-25-03
+  seed_chunk_id: blog-clickhouse-release-25-03-c000
+  seed_topic_id: 19
+  notes: ''
+- query: How can I automatically update features using materialized views in ClickHouse?
+  relevant_source_url: https://clickhouse.com/blog/modeling-machine-learning-data-in-clickhouse
+  seed_chunk_id: blog-modeling-machine-learning-data-in-clickhouse-jp-c016
+  seed_topic_id: 34
+  notes: ''
+- query: How do you convert WKT text format to polygon type in ClickHouse?
+  relevant_source_url: https://clickhouse.com/blog/exploring-global-internet-speeds-with-apache-iceberg-clickhouse
+  seed_chunk_id: blog-exploring-global-internet-speeds-with-apache-iceberg-clickhouse-c006
+  seed_topic_id: 16
+  notes: ''
+- query: How does ClickHouse compare to Snowflake on cost efficiency and query speed?
+  relevant_source_url: https://clickhouse.com/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis
+  seed_chunk_id: blog-clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis-jp-c001
+  seed_topic_id: 13
+  notes: ''
+- query: How does ClickPipes simplify real-time data ingestion compared to previous
+    streaming methods?
+  relevant_source_url: https://clickhouse.com/blog/real-time-event-streaming-with-confluent-cloud-clickhouse-and-clickpipes
+  seed_chunk_id: blog-real-time-event-streaming-with-confluent-cloud-clickhouse-and-clickpipes-c000
+  seed_topic_id: 25
+  notes: ''
+- query: How can incremental materialized views keep pre-aggregated tables automatically
+    synchronized?
+  relevant_source_url: https://clickhouse.com/blog/accelerating-clickhouse-json-queries-for-fast-bluesky-dashboards
+  seed_chunk_id: blog-accelerating-clickhouse-json-queries-for-fast-bluesky-dashboards-c007
+  seed_topic_id: 20
+  notes: ''
+- query: How much storage space does the temperature data use in this weather dataset?
+  relevant_source_url: https://clickhouse.com/blog/optimize-clickhouse-codecs-compression-schema
+  seed_chunk_id: blog-optimize-clickhouse-codecs-compression-schema-c004
+  seed_topic_id: 18
+  notes: ''
+- query: How do I connect to ClickHouse using the command line client tool?
+  relevant_source_url: https://clickhouse.com/blog/announcing-the-new-sql-playground
+  seed_chunk_id: blog-announcing-the-new-sql-playground-c001
+  seed_topic_id: 47
+  notes: ''
+- query: Which has better storage efficiency, ClickHouse or MongoDB?
+  relevant_source_url: https://clickhouse.com/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql
+  seed_chunk_id: blog-json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql-jp-c001
+  seed_topic_id: 24
+  notes: ''
+- query: Why is ReplicatedMergeTree not suitable for ClickHouse Cloud architecture?
+  relevant_source_url: https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates
+  seed_chunk_id: blog-clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates-c002
+  seed_topic_id: 31
+  notes: ''

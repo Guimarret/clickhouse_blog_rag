@@ -1,0 +1,319 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazilian,english]{babel}
+\usepackage[margin=25mm]{geometry}
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{indentfirst}
+\usepackage{titlesec}
+\usepackage{xcolor}
+
+\setlength{\parindent}{1.25em}
+\setlength{\parskip}{0.4em}
+
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection.}{1em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\selectlanguage{brazilian}
+
+\title{\textbf{Recuperação Densa de Passagens com Modelagem de Tópicos BERTopic Aplicada ao Corpus do Blog ClickHouse}}
+
+\author{
+  \textbf{[INSERIR NOME COMPLETO]$^{1}$, [INSERIR NOME DO PROFESSOR]$^{1}$} \\
+  \texttt{guimarret@gmail.com}, [INSERIR E-MAIL DO PROFESSOR] \\[0.4em]
+  $^{1}$ [INSERIR INSTITUIÇÃO] \\
+  {}[INSERIR CIDADE -- UF]
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\noindent \textbf{Resumo:} A busca por informações em corpora técnicos extensos é frequentemente limitada por sistemas baseados em palavras-chave, que falham ao recuperar conteúdo semanticamente relevante quando os termos exatos não estão presentes no texto-fonte. Este trabalho apresenta um sistema de Recuperação Densa de Passagens (\textit{Dense Passage Retrieval} --- DPR) aplicado ao corpus do blog técnico ClickHouse, composto por 791 artigos, com o objetivo de oferecer busca semântica sobre o conhecimento ali registrado. O pipeline implementado segmenta os textos em 6.171 trechos de até 512 tokens, gera embeddings densos de 1.024 dimensões com o modelo \texttt{BAAI/bge-large-en-v1.5}, organiza os trechos em 73 tópicos automaticamente descobertos via BERTopic (UMAP + HDBSCAN + KeyBERTInspired), e atribui rótulos descritivos a cada tópico via Claude Haiku 4.5. A recuperação inicial por similaridade cosseno é refinada por um re-ranqueador cruzado (\texttt{BAAI/bge-reranker-large}), formando um pipeline em dois estágios. O sistema foi avaliado em um conjunto de 30 consultas curadas com verdade-fundamental ao nível de URL do artigo. Os resultados mostraram recall@10 de 0,933 e MRR de 0,662 na configuração com re-ranqueamento --- um ganho de +10 pontos percentuais em relação à recuperação puramente densa (recall@10 de 0,833). O diferencial do trabalho está na combinação de DPR com modelagem de tópicos explicável e preservação de metadados temporais e de versão por trecho, viabilizando citação contextual e abrindo caminho para futuras consultas filtradas.
+
+\vspace{0.5em}
+\noindent \textbf{Palavras Chaves:} Recuperação Densa de Passagens, Modelagem de Tópicos, BERTopic, BGE, Cross-Encoder, ClickHouse.
+
+\vspace{1em}
+\selectlanguage{english}
+\noindent \textit{\textbf{Abstract:}} \textit{Information retrieval over large technical corpora is often limited by keyword-based systems that fail to surface semantically relevant content when exact terms are absent from the source text. This work presents a Dense Passage Retrieval (DPR) system applied to the ClickHouse technical blog corpus of 791 articles, aimed at semantic search over the embedded knowledge. The implemented pipeline splits texts into 6{,}171 chunks of up to 512 tokens, generates 1{,}024-dimensional dense embeddings using \texttt{BAAI/bge-large-en-v1.5}, organizes chunks into 73 automatically discovered topics via BERTopic (UMAP + HDBSCAN + KeyBERTInspired), and assigns descriptive labels using Claude Haiku 4.5. Initial cosine-similarity retrieval is refined by a cross-encoder reranker (\texttt{BAAI/bge-reranker-large}), forming a two-stage pipeline. The system was evaluated on a curated 30-query set with article-level URL ground truth. Results show recall@10 of 0.933 and MRR of 0.662 under reranking --- a +10 percentage-point gain over dense-only retrieval (recall@10 of 0.833). The contribution lies in combining DPR with explainable topic modeling and per-chunk preservation of temporal and version metadata, enabling contextual citation and future filtered queries.}
+
+\vspace{0.5em}
+\noindent \textit{\textbf{Keywords:}} \textit{Dense Passage Retrieval, Topic Modeling, BERTopic, BGE, Cross-Encoder, ClickHouse.}
+\selectlanguage{brazilian}
+
+\section{Introdução}
+
+A crescente quantidade de documentação técnica publicada em blogs corporativos representa um desafio para a recuperação de informação: usuários precisam localizar conhecimento sobre características específicas, comparações de desempenho e padrões de uso em meio a centenas ou milhares de artigos. Sistemas de busca por palavras-chave, como o BM25 \cite{robertson2009}, oferecem boa precisão em consultas literais, mas falham quando o usuário formula a pergunta com termos diferentes dos utilizados no texto-fonte --- o chamado problema do \textit{vocabulary mismatch} \cite{furnas1987}.
+
+A Recuperação Densa de Passagens (\textit{Dense Passage Retrieval} --- DPR) surge como alternativa neuronal a esse problema \cite{karpukhin2020}. No paradigma DPR, consulta e passagem são codificadas independentemente em vetores de alta dimensionalidade por um modelo de linguagem pré-treinado, e a relevância é medida pela similaridade entre os vetores resultantes. Esse mapeamento captura paráfrases, sinônimos e relações semânticas inacessíveis a abordagens lexicais.
+
+Os modelos da família BGE \cite{xiao2024} representam o estado da arte atual em codificadores \textit{bi-encoder} para o inglês, oferecendo embeddings de 1.024 dimensões com forte desempenho na benchmark MTEB. Para a etapa de re-ranqueamento, modelos de atenção cruzada (\textit{cross-encoders}) que processam consulta e passagem conjuntamente apresentam ganhos consistentes em recall e precisão a custo computacional maior \cite{nogueira2019}. Em paralelo, a modelagem de tópicos via BERTopic \cite{grootendorst2022} oferece organização não-supervisionada dos documentos em grupos semanticamente coerentes, com rótulos interpretáveis derivados das palavras mais distintivas (c-TF-IDF) e refinados por re-ranqueamento neural de palavras-chave (KeyBERTInspired).
+
+A motivação deste trabalho é integrar essas três abordagens --- DPR com bi-encoder BGE, re-ranqueamento por cross-encoder e modelagem de tópicos BERTopic --- em um único pipeline de recuperação aplicado a um corpus técnico real (791 artigos do blog ClickHouse), com avaliação quantitativa por meio de um conjunto de consultas curadas. O diferencial em relação a sistemas DPR clássicos está em (i) anexar a cada trecho recuperado metadados temporais (data de publicação) e de versão do software citado, viabilizando citações contextuais e consultas filtradas; (ii) atribuir a cada trecho um rótulo de tópico gerado por modelo de linguagem, oferecendo explicabilidade sem comprometer o paradigma de recuperação por similaridade vetorial.
+
+\textit{Este artigo encontra-se organizado da seguinte forma: a seção 2 apresenta a fundamentação teórica dos modelos utilizados. A seção 3 descreve a arquitetura do trabalho proposto. A seção 4 detalha a metodologia de avaliação. Os resultados são apresentados e discutidos na seção 5, e as conclusões na seção 6. A seção 7 declara as ferramentas de IA empregadas.}
+
+\section{Fundamentação Teórica}
+
+\subsection{Recuperação Densa com Bi-Encoders}
+
+Um \textit{bi-encoder} produz duas representações vetoriais separadas --- uma para a consulta e outra para a passagem --- de modo que a similaridade pode ser pré-computada por simples produto interno (ou cosseno, se os vetores forem L2-normalizados). Esse desacoplamento permite indexar previamente todas as passagens do corpus e responder a uma consulta em tempo proporcional ao número de passagens, escalando para milhões de documentos.
+
+O modelo \texttt{bge-large-en-v1.5} \cite{xiao2024} aplicado neste trabalho tem aproximadamente 335 milhões de parâmetros, produz vetores de 1.024 dimensões e aceita janelas de até 512 tokens. Adota a convenção assimétrica do BGE: passagens são codificadas sem prefixo, enquanto consultas recebem o prefixo \textit{``Represent this sentence for searching relevant passages: ''}. Os vetores resultantes são L2-normalizados, tornando o cosseno equivalente ao produto escalar.
+
+\subsection{Re-ranqueamento com Cross-Encoders}
+
+O custo da economia computacional do bi-encoder é a perda de interações cruzadas: consulta e passagem nunca compartilham camadas de atenção. Um \textit{cross-encoder}, em contraste, recebe o par concatenado e produz um único escore de relevância, permitindo que a atenção se especialize sobre correspondências locais, negações e dependências sintáticas \cite{nogueira2019}. Cross-encoders são proibitivamente caros para a etapa inicial de busca (uma inferência por par consulta-passagem sobre o corpus completo), mas eficientes para refinar os $k$ primeiros resultados retornados pelo bi-encoder, em pipelines de dois estágios.
+
+\subsection{Modelagem de Tópicos com BERTopic}
+
+BERTopic \cite{grootendorst2022} organiza um corpus em tópicos coerentes em quatro estágios: (i) projeção dos embeddings densos para baixa dimensionalidade via UMAP \cite{mcinnes2018}; (ii) clusterização por densidade via HDBSCAN \cite{mcinnes2017}, que diferentemente do $k$-means não exige número predefinido de clusters e identifica pontos como \textit{outliers}; (iii) extração de palavras-chave por tópico via c-TF-IDF --- uma adaptação de TF-IDF que trata cada cluster como um documento; (iv) opcionalmente, refinamento das palavras-chave por re-ranqueamento neural (KeyBERTInspired) e rotulação por modelo de linguagem.
+
+\section{O Trabalho Proposto}
+
+A hipótese deste trabalho é a de que um pipeline combinando bi-encoder BGE, BERTopic e re-ranqueamento por cross-encoder pode oferecer recuperação semântica de alta qualidade sobre um corpus técnico real, com explicabilidade adicional vinda da modelagem de tópicos e preservação de metadados que viabilizem citações contextuais.
+
+\subsection{Arquitetura}
+
+O pipeline implementado consiste em seis etapas, ilustradas na Figura~\ref{fig:arquitetura}.
+
+\begin{figure}[!ht]
+\centering
+\begin{minipage}{0.95\linewidth}
+\begin{verbatim}
+   Sitemap clickhouse.com/blog
+            |
+            v   trafilatura
+   791 artigos canonicos
+            |
+            v   chunker recursivo
+                (512 tokens, 64 overlap)
+   6.171 trechos
+            |
+            v   bge-large-en-v1.5
+                (1024 dim, prefixo assimetrico)
+   embeddings densos
+            |
+            v   BERTopic
+                (UMAP + HDBSCAN
+                 + KeyBERTInspired)
+   73 topicos descobertos
+            |
+            v   Claude Haiku 4.5
+                (1 sentenca por topico)
+   topicos rotulados
+            |
+            v   consulta do usuario
+                bi-encoder BGE-Q
+                similaridade cosseno
+   top-50 candidatos
+            |
+            v   bge-reranker-large
+                (cross-encoder)
+   top-k com data, versao
+   e rotulo de topico
+\end{verbatim}
+\end{minipage}
+\caption{Arquitetura do pipeline de recuperação densa proposto.}
+\label{fig:arquitetura}
+\end{figure}
+
+\subsection{Tecnologias Utilizadas}
+
+A Tabela~\ref{tab:tecnologias} sintetiza as principais tecnologias empregadas no pipeline e a função de cada uma.
+
+\begin{table}[!ht]
+\caption{Tecnologias empregadas em cada etapa do pipeline.}
+\label{tab:tecnologias}
+\centering
+\small
+\begin{tabular}{p{3.0cm} p{4.0cm} p{5.0cm}}
+\toprule
+\textbf{Componente} & \textbf{Tecnologia} & \textbf{Função} \\
+\midrule
+Extração de texto & trafilatura & Limpeza de HTML para texto \\
+Segmentação & Tokenizer BGE + splitter recursivo & Trechos de até 512 tokens com 64 de sobreposição \\
+Codificador (bi-encoder) & BAAI/bge-large-en-v1.5 & Embeddings densos de 1.024 dimensões \\
+Modelagem de tópicos & BERTopic 0.17 + UMAP + HDBSCAN & Descoberta automática de 73 tópicos \\
+Representação de tópicos & KeyBERTInspired sobre c-TF-IDF & Palavras-chave reordenadas por relevância \\
+Rotulação de tópicos & Anthropic Claude Haiku 4.5 (via API) & Sentenças descritivas (uma por tópico) \\
+Re-ranqueador & BAAI/bge-reranker-large & Refinamento dos 50 melhores candidatos \\
+Armazenamento & Apache Parquet & Tabelas de trechos, embeddings e tópicos \\
+Interface & Typer (CLI em Python) & Comandos \texttt{chunk}, \texttt{embed}, \texttt{fit-topics}, \texttt{query}, \texttt{eval} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Aspectos de Reprodutibilidade}
+
+Para garantir reprodutibilidade entre execuções, a semente do UMAP foi fixada em 42, e cada execução do BERTopic é serializada em um diretório datado e imutável (\texttt{topic\_model\_AAAA-MM-DD/}), contendo o modelo em formato safetensors, as tabelas de tópicos e trechos, a hierarquia de tópicos e um manifesto com os parâmetros usados. O ambiente é gerenciado pela ferramenta \texttt{uv}, com bloqueio de versões em \texttt{uv.lock}.
+
+\section{Materiais e Métodos}
+
+\subsection{Geração do Conjunto de Avaliação}
+
+Para validação científica da recuperação, construiu-se um conjunto de 30 pares pergunta-resposta. A seleção dos trechos-semente seguiu critério estratificado: para cada um dos 30 tópicos com maior número de trechos, foi escolhido o trecho-medóide --- aquele com maior similaridade cosseno ao centróide do tópico. Em seguida, o modelo Claude Haiku 4.5 foi instruído a gerar, para cada trecho, uma pergunta realista de usuário (5 a 15 palavras, com paráfrase obrigatória das frases distintivas do texto-fonte) cuja resposta estivesse contida na passagem.
+
+As 30 perguntas geradas passaram então por revisão manual. Três perguntas originalmente em japonês --- provenientes de tópicos derivados de versões traduzidas dos artigos --- foram traduzidas para o inglês para manter o conjunto monolíngue. Em quatro casos, a URL de verdade-fundamental foi re-apontada do artigo japonês para sua versão inglesa equivalente, presente no corpus, de modo a evitar penalizar o codificador (treinado em inglês) por incompetência \textit{cross-lingual} não relacionada à qualidade da recuperação.
+
+\subsection{Critério de Verdade-Fundamental}
+
+A relevância foi definida ao nível de URL do artigo (\textit{post-level relevance}): uma consulta é considerada ``acerto'' no rank $r$ se qualquer trecho dentre os primeiros $r$ recuperados compartilhar o mesmo \texttt{source\_url} que o trecho-semente. Essa granularidade é mais branda do que correspondência exata de \texttt{chunk\_id} e adequada a uma tarefa de recuperação ao nível de documento, evitando penalizar o sistema por retornar trechos vizinhos do mesmo artigo.
+
+\subsection{Métricas}
+
+Foram computadas as métricas padrão de recuperação:
+
+\begin{itemize}
+  \item \textbf{recall@k} ($k \in \{1, 3, 5, 10\}$): fração de consultas em que ao menos um trecho relevante aparece nos primeiros $k$ resultados;
+  \item \textbf{MRR} (\textit{Mean Reciprocal Rank}): média do recíproco do rank da primeira ocorrência relevante, com valor 0 quando ausente do top-10.
+\end{itemize}
+
+\subsection{Configurações Comparadas}
+
+Duas configurações foram avaliadas sobre o mesmo conjunto de 30 consultas:
+
+\begin{enumerate}
+  \item \textbf{Recuperação densa simples}: similaridade cosseno do BGE bi-encoder sobre os 6.171 trechos do corpus, retornando os top-$k$ diretamente.
+  \item \textbf{Recuperação densa com re-ranqueamento}: BGE bi-encoder retorna os 50 melhores candidatos, e o cross-encoder \texttt{bge-reranker-large} rescora esses 50 pares (consulta, trecho), produzindo a ordenação final.
+\end{enumerate}
+
+\subsection{Ambiente de Execução}
+
+Todos os experimentos foram executados em estação local com processador AMD Ryzen, 64\,GB de memória RAM e GPU AMD Radeon RX 6700 XT (12\,GB de VRAM, com ROCm 7.0). A etapa de geração de embeddings utilizou a GPU; o ajuste do BERTopic foi executado em CPU para evitar contenção de memória de vídeo com outros processos. As chamadas ao Claude Haiku 4.5 foram feitas via API oficial da Anthropic.
+
+\section{Resultados e Discussão}
+
+\subsection{Métricas de Recuperação}
+
+Os resultados quantitativos das duas configurações são apresentados na Tabela~\ref{tab:resultados}.
+
+\begin{table}[!ht]
+\caption{Métricas de recuperação no conjunto de 30 consultas.}
+\label{tab:resultados}
+\centering
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Métrica} & \textbf{Densa} & \textbf{Densa + Re-rank} & $\boldsymbol{\Delta}$ \\
+\midrule
+recall@1   & 0,533 & 0,500 & $-0{,}033$ \\
+recall@3   & 0,700 & 0,800 & $+0{,}100$ \\
+recall@5   & 0,733 & 0,867 & $+0{,}133$ \\
+recall@10  & 0,833 & 0,933 & $+0{,}100$ \\
+MRR        & 0,628 & 0,662 & $+0{,}034$ \\
+Sem acerto (/30) & 5 & 2 & $-3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Análise dos Resultados}
+
+A configuração com re-ranqueamento apresentou ganhos substanciais em recall a partir de $k=3$, com pico de $+13{,}3$ pontos percentuais em recall@5 e $+10$ pontos em recall@10, atingindo 93,3\% de cobertura no top-10. O número de consultas sem qualquer acerto entre os dez primeiros resultados caiu de cinco para duas.
+
+Observa-se também uma leve queda de $3{,}3$ pontos percentuais em recall@1 quando o re-ranqueador é aplicado. Esse efeito é conhecido na literatura \cite{nogueira2019}: cross-encoders, ao re-ordenar uma janela ampla, podem deslocar para a primeira posição um trecho marginalmente mais relevante de um artigo distinto daquele do trecho-semente, transformando um acerto em recall@1 em um acerto somente a partir de recall@3. Para tarefas em que o documento de origem único é estritamente crítico, essa troca pode ser indesejável; para tarefas de recuperação ao nível de documento, o ganho em ranks mais profundos compensa amplamente a perda.
+
+\subsection{Análise das Duas Consultas Sem Acerto}
+
+Os dois erros residuais sob re-ranqueamento foram inspecionados manualmente:
+
+\begin{enumerate}
+  \item \textit{``How can you optimize ClickHouse trace queries with materialized views and indexing strategies?''} --- a verdade-fundamental aponta para um artigo específico sobre armazenamento de \textit{traces} com OpenTelemetry, porém a consulta é genérica o suficiente para que outros artigos sobre otimização e \textit{views} materializadas sejam recuperados em posições superiores. Trata-se de ambiguidade legítima da verdade-fundamental.
+  \item \textit{``What new feature became production-ready in ClickHouse version 24.10?''} --- a semente está em um boletim mensal que resume \textit{features} da versão 24.10, enquanto o sistema corretamente prioriza o artigo de \textit{release notes} oficial da própria 24.10, considerado pelo cross-encoder como resposta mais direta à pergunta.
+\end{enumerate}
+
+Em ambos os casos, a falha é menos uma limitação do codificador e mais um indicativo de que a verdade-fundamental, ao nível de URL único, é simplificação útil mas imperfeita.
+
+\subsection{Custos e Tempos}
+
+O processo completo das etapas 1 a 4 do pipeline (segmentação, embedding, ajuste de tópicos e rotulação) levou aproximadamente:
+
+\begin{itemize}
+  \item Segmentação: 32 segundos (CPU);
+  \item Geração de embeddings: 5 minutos e 16 segundos (GPU, cerca de 1,65\,s por \textit{batch} de 32 trechos);
+  \item Ajuste do BERTopic: cerca de 1 minuto (CPU; UMAP 18\,s, HDBSCAN abaixo de 1\,s, KeyBERTInspired 35\,s);
+  \item Rotulação dos 73 tópicos via Haiku: cerca de 1 minuto e 30 segundos.
+\end{itemize}
+
+O custo monetário das 73 chamadas de rotulação de tópicos somou aproximadamente US\$\,0{,}10 a US\$\,0{,}15. A geração das 30 consultas-semente via Haiku consumiu cerca de US\$\,0{,}10 adicionais. O re-ranqueamento das 30 consultas (1.500 inferências cruzadas executadas em GPU) totalizou cerca de 15 segundos.
+
+\subsection{Discussão Adicional}
+
+O ganho do re-ranqueador sobre o bi-encoder está alinhado com o intervalo esperado pela literatura ($+10$ a $+20$ pontos em recall@k) e ratifica a hipótese central do trabalho: arquiteturas de dois estágios são particularmente eficazes em corpora técnicos densos, nos quais a similaridade lexical alta entre artigos sobre temas próximos (por exemplo, várias \textit{release notes} sucessivas, comparações entre bancos de dados, otimização de consultas) confunde o bi-encoder, mas é resolvida pelo cross-encoder, que atende às nuances de cada par específico.
+
+A modelagem de tópicos, embora não diretamente avaliada como filtro de recuperação neste trabalho (foi adotado o chamado modo A --- metadado anexo ao resultado), provou-se útil para explicabilidade: cada um dos 73 tópicos recebeu rótulo descritivo gerado por LLM, e cada trecho retornado pelo comando \texttt{query} carrega o rótulo do tópico ao qual pertence, facilitando inspeção qualitativa pelo usuário.
+
+\section{Conclusões}
+
+Este trabalho implementou e avaliou um sistema de Recuperação Densa de Passagens sobre o blog técnico ClickHouse, combinando o codificador bi-encoder \texttt{BAAI/bge-large-en-v1.5}, a biblioteca de modelagem de tópicos BERTopic e o re-ranqueador cruzado \texttt{BAAI/bge-reranker-large}. O sistema atingiu recall@10 de 93,3\% e MRR de 0,662 em um conjunto de avaliação de 30 consultas curadas, com infraestrutura totalmente reprodutível.
+
+Como pontos fortes destacam-se: (i) a arquitetura em dois estágios permite combinar a escala do bi-encoder com a precisão do cross-encoder sem custos proibitivos no tempo de consulta; (ii) a preservação de metadados temporais e de versão por trecho viabiliza citações ricas e abre caminho para futuras consultas com filtro temporal; (iii) a modelagem de tópicos adiciona explicabilidade sem prejudicar o paradigma de recuperação vetorial; (iv) o pipeline inteiro foi construído com bibliotecas de código aberto, exceto pela rotulação de tópicos, que utilizou API comercial --- passível de substituição por LLM local, conforme demonstrado pelo \textit{script} de instalação do Qwen 2.5 via Ollama incluído no repositório como alternativa.
+
+Como limitações reconhecem-se: (i) o codificador bi-encoder utilizado é primariamente treinado em inglês, e consultas em outras línguas sobre passagens em inglês (ou vice-versa) apresentam degradação severa, conforme observado em experimentos preliminares com perguntas em japonês; (ii) o conjunto de avaliação, embora curado manualmente, foi \textit{seeded} por geração via LLM (Haiku), o que pode introduzir viés a favor das construções típicas desse modelo; (iii) o sistema implementa apenas a etapa de recuperação, sem componente generativo de resposta (estágio ``G'' do paradigma RAG completo); (iv) a verdade-fundamental ao nível de URL é uma simplificação útil, mas inadequada para tarefas que exijam precisão ao nível de parágrafo.
+
+Como recomendações para trabalhos similares: (a) utilizar codificadores multilíngues, como o \texttt{bge-m3}, caso o corpus contenha múltiplos idiomas; (b) construir conjunto de avaliação com perguntas reais de usuários quando possível, complementando --- não substituindo --- perguntas geradas por LLM; (c) considerar arquiteturas híbridas combinando BM25 com recuperação densa via \textit{Reciprocal Rank Fusion}, para consultas dominadas por nomes próprios ou acrônimos.
+
+Como direções futuras, propõem-se: (a) adicionar o estágio generativo de resposta, transformando o sistema em RAG completo; (b) implementar recuperação em dois estágios com filtro por tópico (modo B), avaliando se a restrição prévia ao escopo do tópico melhora a precisão; (c) persistir os embeddings em um índice vetorial dedicado (pgvector ou índice nativo do ClickHouse), eliminando a necessidade de recomputar a multiplicação matricial a cada consulta; (d) avaliar a transferência do pipeline para outros corpora técnicos de natureza semelhante.
+
+\section{Uso de IA}
+
+Foram utilizadas as seguintes ferramentas de Inteligência Artificial neste trabalho:
+
+\begin{itemize}
+  \item \textbf{Claude Code (Anthropic)} --- assistente de programação utilizado durante o desenvolvimento do código do \textit{pipeline} (geração inicial de \textit{boilerplate}, refatoração, depuração e auxílio na elaboração da redação deste artigo, com revisão e edição finais pelo autor).
+  \item \textbf{Claude Haiku 4.5 (Anthropic, via API)} --- geração das 73 sentenças descritivas dos tópicos e das 30 perguntas-semente do conjunto de avaliação.
+  \item \textbf{BAAI/bge-large-en-v1.5} --- modelo \textit{bi-encoder} utilizado para a geração de \textit{embeddings} densos de consultas e passagens.
+  \item \textbf{BAAI/bge-reranker-large} --- modelo \textit{cross-encoder} utilizado na etapa de re-ranqueamento.
+  \item \textbf{BERTopic 0.17} --- biblioteca empregada para descoberta automática de tópicos, incluindo o componente KeyBERTInspired, que utiliza internamente um \textit{SentenceTransformer} para refinamento de palavras-chave.
+  \item \textbf{UMAP e HDBSCAN} --- algoritmos de redução de dimensionalidade e clusterização integrados ao BERTopic.
+\end{itemize}
+
+\renewcommand{\refname}{Referências Bibliográficas}
+
+\begin{thebibliography}{99}
+
+\bibitem{furnas1987}
+Furnas, G.~W., Landauer, T.~K., Gomez, L.~M. and Dumais, S.~T. (1987). The vocabulary problem in human-system communication. \textit{Communications of the ACM}, Vol. 30, No. 11, pp. 964--971.
+
+\bibitem{grootendorst2022}
+Grootendorst, M. (2022). BERTopic: Neural topic modeling with a class-based TF-IDF procedure. \textit{arXiv preprint}, arXiv:2203.05794.
+
+\bibitem{karpukhin2020}
+Karpukhin, V., O\u{g}uz, B., Min, S., Lewis, P., Wu, L., Edunov, S., Chen, D. and Yih, W. (2020). Dense Passage Retrieval for Open-Domain Question Answering. In \textit{Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)}, pp. 6769--6781.
+
+\bibitem{mcinnes2018}
+McInnes, L. and Healy, J. (2018). UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction. \textit{arXiv preprint}, arXiv:1802.03426.
+
+\bibitem{mcinnes2017}
+McInnes, L., Healy, J. and Astels, S. (2017). hdbscan: Hierarchical density based clustering. \textit{The Journal of Open Source Software}, Vol. 2, No. 11, p. 205.
+
+\bibitem{nogueira2019}
+Nogueira, R. and Cho, K. (2019). Passage Re-ranking with BERT. \textit{arXiv preprint}, arXiv:1901.04085.
+
+\bibitem{reimers2019}
+Reimers, N. and Gurevych, I. (2019). Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks. In \textit{Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP)}, pp. 3982--3992.
+
+\bibitem{robertson2009}
+Robertson, S. and Zaragoza, H. (2009). The Probabilistic Relevance Framework: BM25 and Beyond. \textit{Foundations and Trends in Information Retrieval}, Vol. 3, No. 4, pp. 333--389.
+
+\bibitem{xiao2024}
+Xiao, S., Liu, Z., Zhang, P. and Muennighoff, N. (2024). C-Pack: Packed Resources For General Chinese Embeddings. In \textit{Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval}, pp. 641--649.
+
+\end{thebibliography}
+
+\end{document}
