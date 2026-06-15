@@ -2,9 +2,9 @@
 
 **Recuperação Densa de Passagens com Modelagem de Tópicos BERTopic Aplicada ao Corpus do Blog ClickHouse**
 
-**GUILHERME ESTEVES MARRET¹, JOÃO PAULO MARTINS DE BRITO¹, LEONARDO DE LELIS ROSSI¹**
+**GUILHERME ESTEVES MARRET¹, JOÃO PAULO MARTINS DE BRITO¹, MATHEUS CASTRO ALEXANDRE¹, LEONARDO DE LELIS ROSSI¹**
 
-guimarret@gmail.com, joao.paulomartins107@gmail.com, leoboralelis@gmail.com
+guimarret@gmail.com, joao.paulomartins107@gmail.com, castro3filho@gmail.com, leoboralelis@gmail.com
 
 ¹Faculdade de Tecnologia de Jundiaí  
 Jundiaí - SP
